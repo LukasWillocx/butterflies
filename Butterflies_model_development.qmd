@@ -17,8 +17,15 @@ library(imager)
 library(dplyr)
 library(stringr)
 library(reticulate)
-use_virtualenv("D:/.virtualenvs/r-tf-gpu", required = TRUE) #into the v_env
+#use_virtualenv("D:/.virtualenvs/tf2_rocm_env", required = TRUE) #into the v_env
+#install_keras(extra_packages = 'tensorflow-directml-plugin',method='virtualenv')
 library(keras)
+# install_tensorflow(
+#   envname = "D:/.virtualenvs/tf2_rocm_env",
+#   extra_packages = c("tensorflow-directml-plugin","pandas","numpy","Pillow"),  # Use this for TF 2.10
+#   python_version = "3.10.11",
+#   restart_session = TRUE)
+#install_keras()
 library(tensorflow)
 ```
 
@@ -79,7 +86,9 @@ train_labels<-data.frame(read.csv("D:/data/butterflies/training_set.csv"))
 Image identifiers to file paths
 
 ```{r}
-train_labels$path<- paste0("D:/data/butterflies/train/",train_labels$filename)
+train_labels$path<- paste0("D:/data/butterflies/train_rembg/",
+                           paste0(tools::file_path_sans_ext(train_labels$filename), ".png"))
+train_labels$label<-as.factor(train_labels$label)
 
 num_classes<-length(unique(train_labels$label))
 ```
@@ -104,7 +113,7 @@ train_generator <- flow_images_from_dataframe( #dataframe instead of directory w
   target_size = c(224, 224),
   class_mode = 'categorical',
   subset = 'training',
-  batch_size = 64
+  batch_size = 32
 )
 
 validation_generator <- flow_images_from_dataframe(#dataframe instead of directory with folders that signify classes
@@ -115,7 +124,7 @@ validation_generator <- flow_images_from_dataframe(#dataframe instead of directo
   target_size = c(224, 224),
   class_mode = 'categorical',
   subset = 'validation',
-  batch_size = 64
+  batch_size = 32
 )
 ```
 
@@ -123,18 +132,9 @@ validation_generator <- flow_images_from_dataframe(#dataframe instead of directo
 
 ```{r}
 model <- keras_model_sequential() %>%
- layer_dense(units = 512, activation = "relu") %>%
   layer_batch_normalization() %>%
-  layer_dropout(rate = 0.5) %>%
-  
-  # Hidden layers
-  layer_dense(units = 256, activation = "relu") %>%
-  layer_dropout(rate = 0.4) %>%
-  
-  layer_dense(units = 128, activation = "relu") %>%
-  layer_dropout(rate = 0.3) %>%
   layer_flatten()%>%
-  layer_dense(units = length(unique(train_generator$class_indices)), activation = 'softmax')
+  layer_dense(units = num_classes, activation = 'softmax')
 ```
 
 ## Model compilation
@@ -192,8 +192,48 @@ print(paste("Predicted Class:", predicted_class_name))
 ## Transfer training with ResNet-50
 
 ```{r}
+train_datagen <- image_data_generator(
+  rescale = 1/255,
+  rotation_range = 30,
+  width_shift_range = 0.2,
+  height_shift_range = 0.2,
+  zoom_range = 0.3,
+  horizontal_flip = TRUE,
+  fill_mode = "constant",
+  validation_split = 0.2
+)
+
+val_datagen <- image_data_generator(
+  rescale = 1/255,
+  validation_split = 0.2
+)
+
+train_generator <- flow_images_from_dataframe( #dataframe instead of directory with folders that signify classes
+  dataframe = train_labels,
+  x_col = 'path',
+  y_col = 'label',
+  generator = train_datagen,
+  target_size = c(224, 224),
+  class_mode = 'categorical',
+  subset = 'training',
+  batch_size = 32,
+  shuffle=T
+)
+
+validation_generator <- flow_images_from_dataframe(#dataframe instead of directory with folders that signify classes
+  dataframe = train_labels,
+  x_col = 'path',
+  y_col = 'label',
+  generator = val_datagen,
+  target_size = c(224, 224),
+  class_mode = 'categorical',
+  subset = 'validation',
+  batch_size = 32,
+  shuffle=T
+)
+####################################################################
 # Load the pre-trained ResNet50 model, excluding the top layer
-base_model <- application_resnet50(
+base_model <- application_mobilenet_v2(
   weights = "imagenet", 
   include_top = FALSE, 
   input_shape = c(224, 224, 3)
@@ -202,16 +242,18 @@ base_model <- application_resnet50(
 # Freeze the base model layers to retain learned features
 freeze_weights(base_model)
 
-# Build the model using functional API (corrected approach)
-output <- base_model$output %>% 
-  layer_global_average_pooling_2d() %>% 
-  layer_dense(units = 128, activation = 'relu', kernel_regularizer = regularizer_l2(0.001)) %>% 
-  layer_dropout(rate = 0.5) %>% 
-  layer_dense(units = 64, activation = 'relu', kernel_regularizer = regularizer_l2(0.001)) %>% 
-  layer_dropout(rate = 0.3) %>% 
-  layer_dense(units = num_classes, activation = 'softmax')
-# Create the final model
-model <- keras_model(inputs = base_model$input, outputs = output)
+model <- keras_model_sequential() %>%
+  base_model %>%
+  layer_global_average_pooling_2d() %>%
+  layer_batch_normalization() %>%
+  layer_dense(units = 512, activation = "relu") %>%
+  layer_batch_normalization() %>%
+  layer_dropout(rate = 0.4) %>%
+  layer_dense(units = 256, activation = "relu") %>%
+  layer_batch_normalization() %>%
+  layer_dropout(rate = 0.3) %>%
+  layer_dense(units = num_classes, activation = "softmax")
+
 
 # Compile the model (updated learning rate parameter name)
 model %>% compile(
@@ -220,13 +262,22 @@ model %>% compile(
   metrics = c('accuracy')
 )
 
+callbacks_list <- list(
+  callback_early_stopping(
+    monitor = "val_accuracy",
+    patience = 10,
+    restore_best_weights = TRUE
+  )
+)
+
 # Train the model (ensure generators are properly defined)
-history <- model %>% fit_generator(
+history <- model %>% fit(
   train_generator,
   epochs = 100,
+  callbacks = callbacks_list,
   validation_data = validation_generator,
-  steps_per_epoch =  as.integer(train_generator$n / 64),
-  validation_steps = as.integer(validation_generator$n / 64)
+  steps_per_epoch =  ceiling(train_generator$n / 32),
+  validation_steps = ceiling(validation_generator$n / 32)
 )
 ```
 
