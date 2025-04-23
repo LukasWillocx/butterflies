@@ -1,51 +1,58 @@
 ---
-title: "Butterflies deep-learning model"
+title: "Butterfly classification model"
 author: "Lukas Willocx"
-format: html
+date: today
+format:
+  html:
+    theme: cosmo
 editor: visual
 ---
 
 ## Objective
 
-## Model creation
+Through [Kaggle](https://www.kaggle.com/datasets/phucthaiv02/butterfly-image-classification) a butterfly image data-set was obtained. These comprised of 6499 .jpg images in a 224x224 format, featuring 75 different kinds of butterflies, native to North America. This document aims at producing a deep-learning model that's able to distinguish these species as accurately as possible. To this end, the keras package will be used. This leverages a virtual python environment to invoke tensorflow for the deep-learning process. Two methodologies were taken under consideration. Since I only have access to a modern AMD GPU, I couldn't rely on CUDA for GPU acceleration. I could only get GPU support working through the directml plugin under tensorflow 1.15.8 , which is by all means severely outdated. Up to date tensorflow could therefore only be ran on CPU. The performance hit wasn't unmanageable since I had access to 24 modern CPU threads ( R9 7900).
 
 ```{r}
-#| echo: false
+#| echo: true
 #| include: true
 #| warning: false
 library(imager)  
 library(dplyr)
 library(stringr)
-library(reticulate)
-#use_virtualenv("D:/.virtualenvs/tf2_rocm_env", required = TRUE) #into the v_env
-#install_keras(extra_packages = 'tensorflow-directml-plugin',method='virtualenv')
 library(keras)
-# install_tensorflow(
-#   envname = "D:/.virtualenvs/tf2_rocm_env",
-#   extra_packages = c("tensorflow-directml-plugin","pandas","numpy","Pillow"),  # Use this for TF 2.10
-#   python_version = "3.10.11",
-#   restart_session = TRUE)
-#install_keras()
+
+# CPU only approach with up to date tensorflow >2.15.X
+# install_keras() # create a virtual python environment for tensorflow
+
+# GPU approach with outdated tensorflow 1.15.8 (custom python 3.7 environment)
+# This environment is also required for background removal (hosts the required libraries)
+# library(reticulate)
+# use_virtualenv("D:/.virtualenvs/r-tf-gpu")
 library(tensorflow)
 ```
 
-## Background removal
+## Background removal of .jpg butterfly images
 
-### Declaring function to remove the background of the images
+This function takes all images in one folder and spits them out without a background in another user-defined folder.
 
-This function takes all images in one folder and spits them out without a background in another user-defined folder. The output image is a .png regardless since we're handling the absence of a background.
+-   folder **train** - contains the original, unaltered images as obtained through Kaggle
+
+-   folder **train_rembg** - recipient folder for the background removal image processing
+
+The output image is a .png with the same dimensions as the original image at 224 by 224. The image processing leverages python code as this is more established for this particular purpose.
 
 ```{r}
 remove_background_rembg <- function(input_folder, output_folder) {
-  # Load Python modules from python environment r-tf-gpu
+  # Load Python modules from python environment r-tf-gpu, contains the following
+  # three required packages 
   rembg <- import("rembg")
   PIL <- import("PIL.Image")
   os <- import("os")
   
-  # Create output directory
+  # Create output directory if necessary
   if (!dir.exists(output_folder)) dir.create(output_folder)
   
-  # Process images
+  # Process all eligible images (png and jpg)
   images <- list.files(input_folder, pattern = "\\.(jpg|jpeg|png)$", full.names = TRUE)
   
   lapply(images, function(img_path) {
@@ -64,26 +71,26 @@ remove_background_rembg <- function(input_folder, output_folder) {
 
 ### Performing the removal of the backgrounds
 
-This operation takes a while, the speed at which an image is processed is roughly around one per second. Since the dataset is 6499 large, it takes well over an hour and a half.
+This operation takes a while, the speed at which an image is processed is roughly one per second. Since the dataset is 6499 large, it takes well over an hour and a half. This is also the longest individual step in this deep-learning analysis.
 
 ```{r}
 #| eval: False
-#| include: False
-#| echo: False
-#| include: False
+#| echo: True
 remove_background_rembg(
     input_folder = "D:/data/butterflies/train",
     output_folder = "D:/data/butterflies/train_rembg"
 )
 ```
 
-## identifying labels
+## Image label identification
+
+The provided images are simply labelled 1-6499. It requires the provided csv file to interpret the data.
 
 ```{r}
 train_labels<-data.frame(read.csv("D:/data/butterflies/training_set.csv"))
 ```
 
-Image identifiers to file paths
+Image file paths are subsequently linked to their respective label that corresponds to the butterfly species depicted in the image.
 
 ```{r}
 train_labels$path<- paste0("D:/data/butterflies/train_rembg/",
@@ -93,105 +100,15 @@ train_labels$label<-as.factor(train_labels$label)
 num_classes<-length(unique(train_labels$label))
 ```
 
-```{r}
-datagen <- image_data_generator(
-  rescale = 1/255,
-  rotation_range = 30,
-  width_shift_range = 0.2,
-  height_shift_range = 0.2,
-  zoom_range = 0.3,
-  horizontal_flip = TRUE,
-  fill_mode = "nearest",
-  validation_split = 0.2
-)
+## Methodology
 
-train_generator <- flow_images_from_dataframe( #dataframe instead of directory with folders that signify classes
-  dataframe = train_labels,
-  x_col = 'path',
-  y_col = 'label',
-  generator = datagen,
-  target_size = c(224, 224),
-  class_mode = 'categorical',
-  subset = 'training',
-  batch_size = 32
-)
+### Transfer training - mobilenet_v2
 
-validation_generator <- flow_images_from_dataframe(#dataframe instead of directory with folders that signify classes
-  dataframe = train_labels,
-  x_col = 'path',
-  y_col = 'label',
-  generator = datagen,
-  target_size = c(224, 224),
-  class_mode = 'categorical',
-  subset = 'validation',
-  batch_size = 32
-)
-```
-
-## Building the model
+This process was reiterated with several pre-trained Convolutional Neural Networks (CNNs). Mobilenet_v2 provided an efficient, fast converging model with great accuracy. Efficiency was key since the model had to be trained on CPU. This took roughly half an hour for the 30 epochs of training. A model of similar accuracy yet, four times as large was derived from vgg19. Since this model is ultimately being webhosted in a portfolio, great efficiency and decent performance is all we're after.
 
 ```{r}
-model <- keras_model_sequential() %>%
-  layer_batch_normalization() %>%
-  layer_flatten()%>%
-  layer_dense(units = num_classes, activation = 'softmax')
-```
-
-## Model compilation
-
-```{r}
-model %>% compile(
-  loss = 'categorical_crossentropy',
-  optimizer = optimizer_adam(learning_rate = 0.01),
-  metrics = c('accuracy')
-)
-```
-
-## Model training
-
-```{r}
-history <- model %>% fit_generator(
-  train_generator,
-  steps_per_epoch = as.integer(train_generator$n / 32),
-  epochs = 100,
-  validation_data = validation_generator,
-  validation_steps = as.integer(validation_generator$n / 32)
-)
-```
-
-## Model evaluation
-
-```{r}
-plot(history)
-```
-
-## Make a prediction
-
-```{r}
-img <- load.image('test2.jpeg') %>%
-  resize(150, 150) %>%
-  as.cimg() %>%
-  as.array() %>%
-  array_reshape(dim = c(1, 150, 150, 3)) %>%
-  `/`(255)
-```
-
-```{r}
-predictions <- model %>% predict(img)
-
-class_indices <- train_generator$class_indices
-predicted_index <- which.max(predictions)
-predicted_class_name <- names(class_indices)[as.integer(predicted_index)]
-
-# Print result
-print(paste("Predicted Class:", predicted_class_name))
-```
-
-# Methodology 2
-
-## Transfer training with ResNet-50
-
-```{r}
+#| eval: false
+#| warning: false
 train_datagen <- image_data_generator(
   rescale = 1/255,
   rotation_range = 30,
@@ -203,47 +120,48 @@ train_datagen <- image_data_generator(
   validation_split = 0.2
 )
 
+# advisable to not perform image manipulations as it might lead to training data overfitting.
 val_datagen <- image_data_generator(
   rescale = 1/255,
   validation_split = 0.2
 )
 
-train_generator <- flow_images_from_dataframe( #dataframe instead of directory with folders that signify classes
-  dataframe = train_labels,
-  x_col = 'path',
-  y_col = 'label',
+train_generator <- flow_images_from_dataframe( 
+  dataframe = train_labels, #provides x_col & y_col
+  x_col = 'path', #image
+  y_col = 'label', #class
   generator = train_datagen,
-  target_size = c(224, 224),
-  class_mode = 'categorical',
+  target_size = c(224, 224), 
+  class_mode = 'categorical', #since multiple class prediction
   subset = 'training',
-  batch_size = 32,
+  batch_size = 32, # can be higher if system ram allows it
   shuffle=T
 )
 
-validation_generator <- flow_images_from_dataframe(#dataframe instead of directory with folders that signify classes
-  dataframe = train_labels,
-  x_col = 'path',
-  y_col = 'label',
+validation_generator <- flow_images_from_dataframe(
+  dataframe = train_labels, #provides x_col & y_col
+  x_col = 'path', #image
+  y_col = 'label', #class
   generator = val_datagen,
   target_size = c(224, 224),
   class_mode = 'categorical',
   subset = 'validation',
-  batch_size = 32,
+  batch_size = 32, # can be higher if system ram allows it
   shuffle=T
 )
 ####################################################################
 # Load the pre-trained ResNet50 model, excluding the top layer
 base_model <- application_mobilenet_v2(
   weights = "imagenet", 
-  include_top = FALSE, 
+  include_top = FALSE, #top layers is the butterfly information we're adding
   input_shape = c(224, 224, 3)
 )
 
 # Freeze the base model layers to retain learned features
 freeze_weights(base_model)
 
-model <- keras_model_sequential() %>%
-  base_model %>%
+model <- keras_model_sequential() %>% #sequential stack of layers model
+  base_model %>% # mobilenet_v2 as a base model
   layer_global_average_pooling_2d() %>%
   layer_batch_normalization() %>%
   layer_dense(units = 512, activation = "relu") %>%
@@ -252,7 +170,7 @@ model <- keras_model_sequential() %>%
   layer_dense(units = 256, activation = "relu") %>%
   layer_batch_normalization() %>%
   layer_dropout(rate = 0.3) %>%
-  layer_dense(units = num_classes, activation = "softmax")
+  layer_dense(units = num_classes, activation = "softmax") #specify it's 75 classes
 
 
 # Compile the model (updated learning rate parameter name)
@@ -273,34 +191,64 @@ callbacks_list <- list(
 # Train the model (ensure generators are properly defined)
 history <- model %>% fit(
   train_generator,
-  epochs = 100,
+  epochs = 30,
   callbacks = callbacks_list,
   validation_data = validation_generator,
-  steps_per_epoch =  ceiling(train_generator$n / 32),
+  steps_per_epoch =  ceiling(train_generator$n / 32), # 32, same as batchsize
   validation_steps = ceiling(validation_generator$n / 32)
 )
+
+save_model_hdf5(model,'butterflies_mobilenet_v2.h5') # for inference
 ```
 
-```{r}
-plot(history)
-```
+### Linking model output index to butterfly species names
+
+Use the train generator (or validation generator for that matter) to construct a data-frame that identifies an index output (0-74) to a categorical butterfly species/class.
 
 ```{r}
-img <- load.image('test.jpg') %>%
-  resize(224, 224) %>%
-  as.cimg() %>%
-  as.array() %>%
-  array_reshape(dim = c(1, 224, 224, 3)) %>%
-  `/`(255)
-```
-
-```{r}
-predictions <- model %>% predict(img)
-
+#| eval: false # has been saved already
 class_indices <- train_generator$class_indices
-predicted_index <- which.max(predictions)
-predicted_class_name <- names(class_indices)[as.integer(predicted_index)]
+class_indices<-data.frame(unlist(class_indices)) %>%
+  rename(index= unlist.class_indices.) 
+class_indices$name <-rownames(class_indices)
 
-# Print result
-print(paste("Predicted Class:", predicted_class_name))
+write.csv2(class_indices,row.names = F, file = 'classes.csv') # for inference 
+```
+
+### Inference function for a single new image
+
+```{r}
+# Single image prediction function
+# Here the background isn't removed. Doesn't affect the inference as perceived in testing). 
+predict_image <- function(model,classes,image_path) {
+  img <- image_load(image_path, target_size = c(224, 224))
+  x <- image_to_array(img)
+  x <- array_reshape(x, c(1, dim(x)))
+  x <- x / 255  # Match training preprocessing
+  pred <- predict(model, x)
+  class_id <- which.max(pred)
+  class_name<-classes$name[class_id]
+  return(list(class = class_name, probability = max(pred)))
+}
+```
+
+### Performing simple inference
+
+To perform inference we need the model that was trained on the 6499 butterfly images. It was previously saved as a .h5 object, which keras can use to infer new images. Furthermore, we require the index information to identify a numeric index as an actual butterfly class/species. These names aren't stored in the model itself.
+
+```{r}
+loaded_model<-load_model_hdf5('butterflies_mobilenet_v2.h5')
+classes<-read.csv2('classes.csv')
+```
+
+```{r}
+summary(loaded_model)
+```
+
+### Inference demonstration
+
+Now that single image inference is possible with a class prediction and a probability metric, the feature can be implemented into an R shiny app.
+
+```{r}
+predict_image(loaded_model,classes,'D:/data/butterflies/test/Image_400.jpg')
 ```
