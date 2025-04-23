@@ -125,8 +125,9 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="co"># GPU approach with outdated tensorflow 1.15.8 (custom python 3.7 environment)</span></span>
 <span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="co"># This environment is also required for background removal (hosts the required libraries)</span></span>
 <span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a><span class="co"># library(reticulate)</span></span>
-<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a><span class="co"># use_virtualenv("D:/.virtualenvs/r-tf-gpu")</span></span>
-<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(tensorflow)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a><span class="co"># use_virtualenv("D:/.virtualenvs/r-tf-gpu")  #gpu mode </span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a><span class="co"># use_virtualenv("D:/.virtualenvs/r-tensorflow") #cpu mode </span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(tensorflow)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
 </section>
 <section id="background-removal-of-.jpg-butterfly-images" class="level2">
@@ -290,7 +291,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </section>
 <section id="linking-model-output-index-to-butterfly-species-names" class="level3">
 <h3 class="anchored" data-anchor-id="linking-model-output-index-to-butterfly-species-names">Linking model output index to butterfly species names</h3>
-<p>Use the train generator (or validation generator for that matter) to construct a data-frame that identifies an index output (0-74) to a categorical butterfly species/class.</p>
+<p>Use the train generator (or validation generator for that matter) to construct a data-frame that identifies an index output (0-74) to a categorical butterfly species/class. The .csv is augmented with other relevant information aside from the butterfly’s common name. This information includes <em>scientific name</em>, <em>family size (wingspan) and location</em>. This information is retrieved by feeding the .csv file with the common names to an LLM. The information is somewhat verified by running it through other LLMs for mistakes. In this instance I let deepseek R1 augment the data and claude 3.7 to verify it.</p>
 <div class="cell">
 <div class="sourceCode cell-code" id="cb7"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>class_indices <span class="ot">&lt;-</span> train_generator<span class="sc">$</span>class_indices</span>
 <span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>class_indices<span class="ot">&lt;-</span><span class="fu">data.frame</span>(<span class="fu">unlist</span>(class_indices)) <span class="sc">%&gt;%</span></span>
@@ -312,9 +313,13 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <span id="cb8-7"><a href="#cb8-7" aria-hidden="true" tabindex="-1"></a>  x <span class="ot">&lt;-</span> x <span class="sc">/</span> <span class="dv">255</span>  <span class="co"># Match training preprocessing</span></span>
 <span id="cb8-8"><a href="#cb8-8" aria-hidden="true" tabindex="-1"></a>  pred <span class="ot">&lt;-</span> <span class="fu">predict</span>(model, x)</span>
 <span id="cb8-9"><a href="#cb8-9" aria-hidden="true" tabindex="-1"></a>  class_id <span class="ot">&lt;-</span> <span class="fu">which.max</span>(pred)</span>
-<span id="cb8-10"><a href="#cb8-10" aria-hidden="true" tabindex="-1"></a>  class_name<span class="ot">&lt;-</span>classes<span class="sc">$</span>name[class_id]</span>
-<span id="cb8-11"><a href="#cb8-11" aria-hidden="true" tabindex="-1"></a>  <span class="fu">return</span>(<span class="fu">list</span>(<span class="at">class =</span> class_name, <span class="at">probability =</span> <span class="fu">max</span>(pred)))</span>
-<span id="cb8-12"><a href="#cb8-12" aria-hidden="true" tabindex="-1"></a>}</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb8-10"><a href="#cb8-10" aria-hidden="true" tabindex="-1"></a>  <span class="fu">return</span>(<span class="fu">list</span>(<span class="at">class =</span> classes<span class="sc">$</span>Name[class_id],</span>
+<span id="cb8-11"><a href="#cb8-11" aria-hidden="true" tabindex="-1"></a>              <span class="at">scientific_name =</span> classes<span class="sc">$</span>Scientific.Name[class_id],</span>
+<span id="cb8-12"><a href="#cb8-12" aria-hidden="true" tabindex="-1"></a>              <span class="at">family =</span> classes<span class="sc">$</span>Family[class_id],</span>
+<span id="cb8-13"><a href="#cb8-13" aria-hidden="true" tabindex="-1"></a>              <span class="at">location =</span> classes<span class="sc">$</span>Location[class_id],</span>
+<span id="cb8-14"><a href="#cb8-14" aria-hidden="true" tabindex="-1"></a>              <span class="at">size_in_mm =</span> classes<span class="sc">$</span>Size..mm.[class_id],</span>
+<span id="cb8-15"><a href="#cb8-15" aria-hidden="true" tabindex="-1"></a>              <span class="at">probability =</span> <span class="fu">max</span>(pred)))</span>
+<span id="cb8-16"><a href="#cb8-16" aria-hidden="true" tabindex="-1"></a>}</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
 </section>
 <section id="performing-simple-inference" class="level3">
@@ -322,7 +327,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <p>To perform inference we need the model that was trained on the 6499 butterfly images. It was previously saved as a .h5 object, which keras can use to infer new images. Furthermore, we require the index information to identify a numeric index as an actual butterfly class/species. These names aren’t stored in the model itself.</p>
 <div class="cell">
 <div class="sourceCode cell-code" id="cb9"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>loaded_model<span class="ot">&lt;-</span><span class="fu">load_model_hdf5</span>(<span class="st">'butterflies_mobilenet_v2.h5'</span>)</span>
-<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>classes<span class="ot">&lt;-</span><span class="fu">read.csv2</span>(<span class="st">'classes.csv'</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>classes<span class="ot">&lt;-</span><span class="fu">read.csv</span>(<span class="st">'classes.txt'</span>) <span class="co"># deepseek augmented data</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
 <div class="cell">
 <div class="sourceCode cell-code" id="cb10"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="fu">summary</span>(loaded_model)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
@@ -358,16 +363,28 @@ ________________________________________________________________________________
 <h3 class="anchored" data-anchor-id="inference-demonstration">Inference demonstration</h3>
 <p>Now that single image inference is possible with a class prediction and a probability metric, the feature can be implemented into an R shiny app.</p>
 <div class="cell">
-<div class="sourceCode cell-code" id="cb12"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="fu">predict_image</span>(loaded_model,classes,<span class="st">'D:/data/butterflies/test/Image_400.jpg'</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb12"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="fu">predict_image</span>(loaded_model,classes,<span class="st">'D:/data/butterflies/test/Image_2747.jpg'</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
-<pre><code>1/1 - 0s - 395ms/epoch - 395ms/step</code></pre>
+<pre><code>1/1 - 0s - 383ms/epoch - 383ms/step</code></pre>
 </div>
 <div class="cell-output cell-output-stdout">
 <pre><code>$class
-[1] "CLOUDED SULPHUR"
+[1] "ORANGE TIP"
+
+$scientific_name
+[1] "Anthocharis cardamines"
+
+$family
+[1] "Pieridae"
+
+$location
+[1] "Western Europe, Temperate Asia"
+
+$size_in_mm
+[1] "45–55"
 
 $probability
-[1] 0.59909</code></pre>
+[1] 0.9761716</code></pre>
 </div>
 </div>
 </section>

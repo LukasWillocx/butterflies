@@ -27,7 +27,8 @@ library(keras)
 # GPU approach with outdated tensorflow 1.15.8 (custom python 3.7 environment)
 # This environment is also required for background removal (hosts the required libraries)
 # library(reticulate)
-# use_virtualenv("D:/.virtualenvs/r-tf-gpu")
+# use_virtualenv("D:/.virtualenvs/r-tf-gpu")  #gpu mode 
+# use_virtualenv("D:/.virtualenvs/r-tensorflow") #cpu mode 
 library(tensorflow)
 ```
 
@@ -203,7 +204,7 @@ save_model_hdf5(model,'butterflies_mobilenet_v2.h5') # for inference
 
 ### Linking model output index to butterfly species names
 
-Use the train generator (or validation generator for that matter) to construct a data-frame that identifies an index output (0-74) to a categorical butterfly species/class.
+Use the train generator (or validation generator for that matter) to construct a data-frame that identifies an index output (0-74) to a categorical butterfly species/class. The .csv is augmented with other relevant information aside from the butterfly's common name. This information includes *scientific name*, *family size (wingspan) and location*. This information is retrieved by feeding the .csv file with the common names to an LLM. The information is somewhat verified by running it through other LLMs for mistakes. In this instance I let deepseek R1 augment the data and claude 3.7 to verify it.
 
 ```{r}
 #| eval: false # has been saved already
@@ -227,8 +228,12 @@ predict_image <- function(model,classes,image_path) {
   x <- x / 255  # Match training preprocessing
   pred <- predict(model, x)
   class_id <- which.max(pred)
-  class_name<-classes$name[class_id]
-  return(list(class = class_name, probability = max(pred)))
+  return(list(class = classes$Name[class_id],
+              scientific_name = classes$Scientific.Name[class_id],
+              family = classes$Family[class_id],
+              location = classes$Location[class_id],
+              size_in_mm = classes$Size..mm.[class_id],
+              probability = max(pred)))
 }
 ```
 
@@ -238,7 +243,7 @@ To perform inference we need the model that was trained on the 6499 butterfly im
 
 ```{r}
 loaded_model<-load_model_hdf5('butterflies_mobilenet_v2.h5')
-classes<-read.csv2('classes.csv')
+classes<-read.csv('classes.txt') # deepseek augmented data
 ```
 
 ```{r}
@@ -250,5 +255,5 @@ summary(loaded_model)
 Now that single image inference is possible with a class prediction and a probability metric, the feature can be implemented into an R shiny app.
 
 ```{r}
-predict_image(loaded_model,classes,'D:/data/butterflies/test/Image_400.jpg')
+predict_image(loaded_model,classes,'D:/data/butterflies/test/Image_2747.jpg')
 ```
