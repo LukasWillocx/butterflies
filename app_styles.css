@@ -1,0 +1,97 @@
+:root {
+  /* Light Theme */
+  --primary-color: #7aa6a1;
+  --secondary-color: #d4b996;
+  --accent-color: #f0c8a8;
+  --background-color: #fff9f5;
+  --text-color: #4a4a4a;
+  --panel-bg: #ffffff;
+  --border-color: #f0e6dc;
+  --input-bg: var(--panel-bg);
+  --input-text: var(--text-color);
+}
+
+[data-theme="dark"] {
+  /* Dark Theme */
+  --primary-color: #8abeb7;
+  --secondary-color: #c2a689;
+  --accent-color: #d8b09f;
+  --background-color: #2a2a2a;
+  --text-color: #f0e6dc;
+  --panel-bg: #383838;
+  --border-color: #4a4a4a;
+  --input-bg: var(--panel-bg);
+  --input-text: var(--text-color);
+}
+
+/* Base Styles */
+body {
+  background-color: var(--background-color);
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  line-height: 1.6;
+  color: var(--text-color);
+  transition: all 0.3s ease;
+}
+
+/* Theme Toggle Button */
+.theme-toggle-btn {
+  background-color: var(--background-color);
+  color: var(--text-color);
+  font-size: 12;
+  border: none;
+  padding: 4px 8px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.theme-toggle-btn:hover {
+  opacity: 0.8;
+  transform: scale(1.5);
+}
+
+/* Input Styling */
+select, .shiny-input-container {
+  background-color: var(--input-bg) !important;
+  color: var(--text-color) !important;
+  border: 1px solid var(--border-color) !important;
+  border-radius: 4px !important;
+  padding: 6px 12px !important;
+}
+
+/* Panel Styling */
+.custom-panel {
+  background-color: var(--panel-bg);
+  padding: 20px;
+  margin-bottom: 20px;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.well {
+  background-color: var(--panel-bg) !important;
+  border: 2px solid var(--border-color) !important;
+}
+
+.main-panel {
+  background-color: var(--background-color) !important;
+}
+
+/* Tab Styling */
+.nav-tabs {
+  border-bottom-color: var(--border-color) !important;
+}
+
+.nav-tabs > li > a {
+  color: var(--text-color) !important;
+  background-color: transparent !important;
+  border: none !important;
+}
+
+.nav-tabs > li.active > a {
+  color: var(--primary-color) !important;
+  border-bottom: 3px solid var(--primary-color) !important;
+}
+
+
