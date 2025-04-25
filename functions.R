@@ -14,3 +14,8 @@ predict_image <- function(model,classes,image_path) {
               size_in_mm = classes$Size..mm.[class_id],
               probability = max(pred)))
 }
+
+read_html_file <- function(file_path) {
+  lines <- readLines(con = file_path, warn = FALSE)
+  paste(lines, collapse = "\n")
+}
