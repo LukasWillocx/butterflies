@@ -4,6 +4,7 @@
   --secondary-color: #d4b996;
   --accent-color: #f0c8a8;
   --background-color: #fff9f5;
+  --background-color2: #eefff5;
   --text-color: #4a4a4a;
   --panel-bg: #ffffff;
   --border-color: #f0e6dc;
@@ -17,6 +18,7 @@
   --secondary-color: #c2a689;
   --accent-color: #d8b09f;
   --background-color: #2a2a2a;
+  --background-color2: #2a2a3b;
   --text-color: #f0e6dc;
   --panel-bg: #383838;
   --border-color: #4a4a4a;
@@ -28,7 +30,7 @@
 body {
   background-color: var(--background-color);
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-  line-height: 1.6;
+  line-height: 2;
   color: var(--text-color);
   transition: all 0.3s ease;
 }
