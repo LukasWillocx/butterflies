@@ -78,18 +78,25 @@ ui <- fluidPage(
         type = "tabs",
         tabPanel("Model inference",
                  fluidRow(
-                   column(12, div(class = "custom-panel", height = '224px',
+                   column(12, div(class = "custom-panel",
                                  h3('Prediction'),
                                  hr(),
                                  withSpinner(uiOutput("prediction")),
                    )),
                    ),
                  ),
-        tabPanel('Model Training',
+        tabPanel('Model training',
                  tabsetPanel(
                  tabPanel('html',tags$iframe(src = "Butterflies_model_development.html")),
                  tabPanel('markdown',includeMarkdown("www/Butterflies_model_development.qmd")),
-        ))
+        )),
+        tabPanel('Training data distribution',
+                 fluidRow(
+                   column(12, div(class = "custom-panel",
+                                  withSpinner(plotlyOutput("distribution",height='1200px')),
+                   )),
+                 ),
+                 )
         ),
       )
     )
@@ -98,9 +105,13 @@ ui <- fluidPage(
 
 server <- function(input, output) {
   
+  
+  labels<-read.csv('Training_set.csv')$label
+  label_freq<-data.frame(table(labels))
+
+  
   output$prediction <- renderUI({
     req(input$image)
-    
     # Predict the image and retrieve details
     prediction <- predict_image(loaded_model, classes, input$image$datapath)
     
@@ -122,6 +133,26 @@ server <- function(input, output) {
      par(mar = c(0, 0, 0, 0))
      plot(as.raster(resized_img))
    },bg='transparent')
+   
+   output$distribution<- renderPlotly({
+     p<-ggplot(label_freq,aes(x=labels,y=Freq))+
+       geom_bar(stat='identity',aes(fill=Freq),color = "transparent",width=0.5)+
+       coord_flip()+  # Flip coordinates if you prefer horizontal bars
+       theme(
+         plot.background = element_rect(fill = "transparent", colour = NA),
+         panel.background = element_rect(fill = "transparent", colour = NA),
+         panel.grid.minor.y = element_blank(),
+         panel.grid.major.y = element_blank(),
+         panel.grid.major.x = element_line(color='#CEDECE',linetype=4),
+         panel.grid.minor.x = element_line(color='#CEDECE',linetype=4),
+         legend.position='none',
+         axis.title = element_blank(),
+         axis.text = element_text(color = "#7aa6a1",hjust = -1),
+         axis.ticks = element_blank(),
+       )+
+       labs(title=NULL)
+     ggplotly(p,tooltip = c('labels','y'))
+   })
    
 }
 
