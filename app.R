@@ -58,9 +58,9 @@ ui <- fluidPage(
                           style = "border-radius: 20%; background-color: var(--background-color2); padding: 5px;",
                           tags$b(lib)))})),
       hr(),
-      tags$div(style = "text-align: center",h5('Butterfly data information & source')),
+      tags$div(style = "text-align: center",h5('Butterfly data information')),
       hr(),
-      HTML(paste('<strong>File type: </strong>','.jpeg','<br>')),
+      HTML(paste('<strong>File type: </strong>','.jpg','<br>')),
       HTML(paste('<strong>Image size: </strong>','224x224','<br>')),
       HTML(paste('<strong>Sample size: </strong>','6499','<br>')),
       HTML(paste('<strong>Number of species: </strong>','75','<br>')),
@@ -70,8 +70,9 @@ ui <- fluidPage(
       tags$div(style = "text-align: center",h5('About the application')),
       hr(),
       p("This application features a deep-learning exercise on the classification of 75 butterfly species. Inference can be performed
-        in the main panel, provided it's an image of a species the model has been trained on. The convolutional neural network (CNN) model is constructed and trained
-        using the Keras API that leverages TensorFlow in a virtual python environment. It's been established through transfer training, on top of the mobilenet_v2 CNN.
+        in the main panel, provided it's an image of a species the model has been trained on. Which species the model has been trained on, can be observed in the training data distribution tab.
+        The convolutional neural network (CNN) model is constructed and trained
+        using the Keras API that leverages TensorFlow in a virtual python environment. It has been realized through transfer training, on top of the mobilenet_v2 CNN.
         Model training can be assessed in its respective tab in the main panel.")
     ),
     
