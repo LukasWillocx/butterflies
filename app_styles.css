@@ -104,10 +104,6 @@ iframe {
   overflow: hidden; 
   flex-grow: 1; /* Allow iframe to fill the container */
 }
-md-html {
-  background-color: var(--background-color);
-  color: var(--text-color);
-}
 
 .tab-pane pre {
   background-color: var(--background-color);

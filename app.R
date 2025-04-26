@@ -1,4 +1,4 @@
-packages <- c('shiny','shinythemes' ,'shinycssloaders','keras','imager','htmltools','bslib')
+packages <- c('shiny','shinythemes' ,'shinycssloaders','keras','imager','htmltools','bslib','ggplot2','plotly',"shinyjs")
 
 for(pkg in packages) {
   library(pkg, character.only = TRUE)
@@ -9,6 +9,7 @@ classes<-read.csv('classes.txt') # relates model output index to context
 source('functions.R')
 
 ui <- fluidPage(
+  shinyjs::useShinyjs(),
   includeCSS("app_styles.css"),
   tags$script(HTML("
     function toggleTheme() {
@@ -33,9 +34,11 @@ ui <- fluidPage(
   sidebarLayout(
     sidebarPanel(
       width = 3,
-      h4("Navigation"),
-      fileInput('image', 'Upload butterfly image',
+      h4("File selection"),
+      fileInput('image', 'Upload an eligible butterfly image',
                 accept = c('image/png', 'image/jpeg', 'image/jpg')),
+      tags$div(style = "text-align: center",h5('Or select a test image')),
+      uiOutput("thumbnails"),
       hr(),
       tags$div(style = "text-align: center",h3('Uploaded image')),
       withSpinner(imageOutput('image')),
@@ -96,7 +99,9 @@ ui <- fluidPage(
                                   withSpinner(plotlyOutput("distribution",height='1200px')),
                    )),
                  ),
-                 )
+                 ),
+        tabPanel('App functions',
+                 includeMarkdown("www/app_functions.Rmd"))
         ),
       )
     )
@@ -104,16 +109,57 @@ ui <- fluidPage(
 
 
 server <- function(input, output) {
-  
-  
+
   labels<-read.csv('Training_set.csv')$label
   label_freq<-data.frame(table(labels))
-
+  
+  image_files<- reactive({
+    all_files<- list.files("www/test_thumbs")
+    sample(all_files,6)
+  })
+  
+  current_image_path <- reactiveVal(NULL)
+  
+  # Update path when file is uploaded
+  observeEvent(input$image, {
+    req(current_image_path(input$image$datapath))
+  })
+  
+  # Update path when thumbnail is clicked
+  observe({
+    files <- image_files()
+    for (filename in files) {
+      local({
+        fn <- filename
+        btn_id <- paste0("btn_", fn)
+        observeEvent(input[[btn_id]], {
+          full_path <- file.path("www/test_thumbs", fn)
+          current_image_path(full_path)
+          shinyjs::reset("image")  # Clear file input
+        }, ignoreInit = TRUE)
+      })
+    }
+  })
+  
+  #render the thumbnails to select
+  output$thumbnails <- renderUI({
+    thumbs <- lapply(image_files(), function(filename) {
+      actionButton(
+        inputId = paste0("btn_", filename),
+        label = tags$img(
+          src = file.path("test_thumbs", filename),
+          style = "height: 56px; width: 56px; object-fit: cover; margin: 0px;"
+        ),
+        style = "background: transparent; border: none; padding: 2px; margin: 2px;"
+      )
+    })
+    do.call(tagList, thumbs)
+  })
   
   output$prediction <- renderUI({
-    req(input$image)
+    req(current_image_path())
     # Predict the image and retrieve details
-    prediction <- predict_image(loaded_model, classes, input$image$datapath)
+    prediction <- predict_image(loaded_model, classes, current_image_path())
     
     output_text <- paste(
       "<b>Probability:</b> ", sprintf("%.2f%%", prediction$probability * 100), "<br>",
@@ -127,31 +173,15 @@ server <- function(input, output) {
   })
    
    output$image <- renderPlot({
-     req(input$image)
-     img <- load.image(input$image$datapath)
+     req(current_image_path())
+     img <- load.image(current_image_path())
      resized_img <- imager::resize(img, 224, 224)
      par(mar = c(0, 0, 0, 0))
      plot(as.raster(resized_img))
    },bg='transparent')
    
    output$distribution<- renderPlotly({
-     p<-ggplot(label_freq,aes(x=labels,y=Freq))+
-       geom_bar(stat='identity',aes(fill=Freq),color = "transparent",width=0.5)+
-       coord_flip()+  # Flip coordinates if you prefer horizontal bars
-       theme(
-         plot.background = element_rect(fill = "transparent", colour = NA),
-         panel.background = element_rect(fill = "transparent", colour = NA),
-         panel.grid.minor.y = element_blank(),
-         panel.grid.major.y = element_blank(),
-         panel.grid.major.x = element_line(color='#CEDECE',linetype=4),
-         panel.grid.minor.x = element_line(color='#CEDECE',linetype=4),
-         legend.position='none',
-         axis.title = element_blank(),
-         axis.text = element_text(color = "#7aa6a1",hjust = -1),
-         axis.ticks = element_blank(),
-       )+
-       labs(title=NULL)
-     ggplotly(p,tooltip = c('labels','y'))
+      distribution_plotter(label_freq)
    })
    
 }
