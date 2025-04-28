@@ -19,6 +19,8 @@ Through [Kaggle](https://www.kaggle.com/datasets/phucthaiv02/butterfly-image-cla
 library(imager)  
 library(dplyr)
 library(stringr)
+library(reticulate)
+library(tensorflow)
 library(keras)
 library(ggplot2)
 
@@ -27,10 +29,8 @@ library(ggplot2)
 
 # GPU approach with outdated tensorflow 1.15.8 (custom python 3.7 environment)
 # This environment is also required for background removal (hosts the required libraries)
-# library(reticulate)
 # use_virtualenv("D:/.virtualenvs/r-tf-gpu")  #gpu mode 
 # use_virtualenv("D:/.virtualenvs/r-tensorflow") #cpu mode 
-library(tensorflow)
 ```
 
 ## Background removal of .jpg butterfly images
