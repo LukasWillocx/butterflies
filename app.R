@@ -4,6 +4,8 @@ for(pkg in packages) {
   library(pkg, character.only = TRUE)
 }
 
+Sys.setenv(TF_ENABLE_ONEDNN_OPTS = "0")
+
 loaded_model<-load_model_hdf5('butterflies_mobilenet_v2.h5')
 classes<-read.csv('classes.txt') # relates model output index to context
 source('functions.R')
@@ -115,7 +117,7 @@ server <- function(input, output) {
   label_freq<-data.frame(table(labels))
   
   image_files<- reactive({
-    all_files<- list.files("www/test_thumbs")
+    all_files<- list.files("www/test_thumbs",full.names = F)
     sample(all_files,6)
   })
   
@@ -123,6 +125,7 @@ server <- function(input, output) {
   
   # Update path when file is uploaded
   observeEvent(input$image, {
+    req(input$image)
     req(current_image_path(input$image$datapath))
   })
   
@@ -134,8 +137,9 @@ server <- function(input, output) {
         fn <- filename
         btn_id <- paste0("btn_", fn)
         observeEvent(input[[btn_id]], {
-          full_path <- file.path("www/test_thumbs", fn)
-          current_image_path(full_path)
+          thumb_path <- normalizePath(file.path("www", "test_thumbs", fn),
+                                      mustWork = TRUE)
+          current_image_path(thumb_path)
           shinyjs::reset("image")  # Clear file input
         }, ignoreInit = TRUE)
       })
@@ -158,9 +162,12 @@ server <- function(input, output) {
   })
   
   output$prediction <- renderUI({
-    req(current_image_path())
+    
+    path <- current_image_path()
+    req(path)
+    
     # Predict the image and retrieve details
-    prediction <- predict_image(loaded_model, classes, current_image_path())
+    prediction <- predict_image(loaded_model, classes, path)
     
     output_text <- paste(
       "<b>Probability:</b> ", sprintf("%.2f%%", prediction$probability * 100), "<br>",
@@ -173,13 +180,24 @@ server <- function(input, output) {
     HTML(output_text)  # Render the output as HTML
   })
    
-   output$image <- renderPlot({
-     req(current_image_path())
-     img <- load.image(current_image_path())
-     resized_img <- imager::resize(img, 224, 224)
-     par(mar = c(0, 0, 0, 0))
-     plot(as.raster(resized_img))
-   },bg='transparent')
+  
+  output$image <- renderPlot({
+    path <- current_image_path()
+    req(path)
+    message(paste("Rendering image from path:", path))
+    tryCatch({
+      img <- load.image(path)
+      resized_img <- imager::resize(img, 224, 224)
+      par(mar = c(0, 0, 0, 0))
+      plot(as.raster(resized_img))
+    }, error = function(e) {
+      message(paste("Error loading image:", e$message))
+      # Create a basic error image
+      plot(1, type="n", axes=FALSE, xlab="", ylab="")
+      text(1, 1, "Error loading image", col="red")
+    })
+  }, bg='transparent')
+  
    
    output$distribution<- renderPlotly({
       distribution_plotter(label_freq)
